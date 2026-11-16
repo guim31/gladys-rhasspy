@@ -1,0 +1,117 @@
+# Rhasspy
+
+Use [Rhasspy 2.5](https://rhasspy.readthedocs.io/), el asistente de voz sin conexión, con Gladys:
+las intenciones que Rhasspy reconoce lanzan sus escenas, y Gladys hace hablar a Rhasspy. Todo se
+queda en su red.
+
+Probada con un Rhasspy 2.5.11 real en Docker, con frases enviadas a su `/api/text-to-intent` (sin
+micrófono): sus comentarios con satélites reales son bienvenidos.
+
+## Lo que obtiene
+
+- Dos disparadores de escena: **intención reconocida** (filtro por intención, site y valores de
+  slots) y **frase no reconocida**.
+- Una acción de escena: **decir un texto**, pronunciado por Rhasspy en el site elegido.
+- Un dispositivo por site de Rhasspy (`default`, un satélite…): última intención, última frase, sus
+  slots y su confianza, con su historial.
+- Un dispositivo servidor (opcional): Rhasspy accesible, versión, idioma del perfil.
+- Un widget del panel, **intenciones**: las últimas frases oídas y un botón para hacer hablar a
+  Rhasspy.
+
+Para Rhasspy 3 o la voz de Home Assistant (protocolo Wyoming, Piper), use en su lugar la
+integración **gladys-wyoming**: hace hablar a Gladys con Piper, no lee las intenciones.
+
+## Requisitos
+
+- Rhasspy **2.5** con MQTT. En Rhasspy, **Settings → MQTT**: elija **External** e indique su
+  broker (Mosquitto…), o mantenga **Internal** y exponga su broker, puerto **12183**.
+- Gladys 5.2 o posterior.
+- El reconocimiento de intenciones configurado en Rhasspy (Fsticuffs, Fuzzywuzzy…), y la síntesis
+  de voz (eSpeak, Larynx, MaryTTS…) para la acción de voz. **Intent Handling** puede quedar
+  desactivado en Rhasspy: la integración lee las intenciones en MQTT.
+
+## Configuración
+
+| Campo                               | Descripción                                                                         |
+| ----------------------------------- | ----------------------------------------------------------------------------------- |
+| Broker MQTT                         | `mqtt://host:1883`, `mqtts://…`, o el broker interno de Rhasspy `mqtt://host:12183` |
+| Usuario, contraseña MQTT            | Si el broker los pide                                                               |
+| Aceptar un certificado autofirmado  | Para `mqtts://` con su propio certificado                                           |
+| Dirección web de Rhasspy (opcional) | `http://host:12101`: añade el dispositivo servidor                                  |
+| Site predeterminado                 | El site que habla cuando una escena no indica ninguno (`default` en Rhasspy)        |
+| Sites escuchados (opcional)         | siteIds separados por comas; vacío: todos los sites                                 |
+| Idioma de los nombres               | Nombres de los dispositivos y textos de la integración                              |
+
+La integración se suscribe a `hermes/intent/#`, `hermes/nlu/intentNotRecognized` y
+`hermes/tts/sayFinished`, y publica `hermes/tts/say`. Con una ACL en el broker, autorice estos
+topics.
+
+## Dispositivos
+
+En **Integraciones → Rhasspy → Descubrimiento**, añada los dispositivos que desee:
+
+- **Rhasspy &lt;site&gt;**: uno por site oído (y el site predeterminado). Última intención (o «(no
+  reconocida)»), última frase tal como se dijo, slots (`name=salon, state=on`) y confianza en %. Un
+  site aparece en cuanto Rhasspy oyó algo en él.
+- **Servidor Rhasspy**: solo con la dirección web. Comprobado cada minuto.
+
+Una frase dicha dos veces se registra dos veces. Las últimas intenciones se guardan en el volumen de
+datos de la integración: sobreviven a un reinicio.
+
+## Escenas
+
+**Intención reconocida**: cada filtro es opcional, uno vacío acepta todo.
+
+- _Intención_: el nombre exacto, como en el `sentences.ini` de Rhasspy (`ChangeLightState`).
+- _Site_: el siteId (`default`, `cocina`…).
+- _Valor del slot 1, 2, 3_: los slots están **ordenados por nombre**. Con
+  `(enciende){state:on} la luz de la (cocina | sala){name}`, el slot 1 es `name`, el slot 2 es
+  `state`: filtre por `cocina` y `on` para «enciende la luz de la cocina».
+
+Las acciones de la escena leen la intención, el site, la frase, la confianza, todos los slots, y el
+nombre y el valor de los slots 1 a 3 (`{{triggerEvent.data.slot_1_value}}`).
+
+**Frase no reconocida**: Rhasspy oyó una frase que no corresponde a ninguna intención; la escena
+lee la frase y el site. Útil para responder «Lo siento, no he entendido» con la acción de voz.
+
+**Decir un texto**: Rhasspy pronuncia el texto con su propia síntesis de voz, en el site indicado
+(o el site predeterminado). La acción tiene éxito cuando Rhasspy confirma la lectura
+(`hermes/tts/sayFinished`); falla tras 30 segundos sin confirmación, por ejemplo con un site
+desconocido.
+
+## Panel
+
+El widget **intenciones** muestra las ocho últimas frases oídas, las más recientes primero:
+intención, frase, hora y site; abra una fila para ver sus slots y su confianza. El botón **Hacer
+hablar** abre un formulario (texto, site). Ajustes: un solo site, ocultar las frases no
+reconocidas, ocultar el botón.
+
+## Acciones
+
+**Comprobar la conexión** indica si el broker MQTT acepta la integración, y si la dirección web de
+Rhasspy responde (versión e idioma del perfil).
+
+## Límites
+
+- Solo Rhasspy 2.5 (Hermes sobre MQTT). Rhasspy 3 y la voz de Home Assistant usan Wyoming: vea
+  gladys-wyoming.
+- Sin Intent Handling «Remote HTTP»: el contenedor de la integración no es accesible desde su red;
+  MQTT es la única entrada.
+- La integración no termina ni prolonga las sesiones de diálogo de Rhasspy: Rhasspy termina una
+  sesión por sí mismo tras la intención.
+- Los filtros de escena comparan valores exactos: un umbral de confianza no es un filtro.
+
+## Solución de problemas
+
+- **No pasa nada**: compruebe que Rhasspy y la integración usan el mismo broker. En Rhasspy, la
+  página **Log** muestra las intenciones publicadas; `mosquitto_sub -v -t 'hermes/intent/#'` las
+  muestra en el broker.
+- **«El broker MQTT rechaza la conexión»**: usuario o contraseña, o una ACL.
+- **La acción de voz falla**: el siteId debe estar servido por Rhasspy (Settings → siteId, o
+  «Satellite siteIds» en el servidor), y la síntesis de voz activada.
+- Registros: **Integraciones → Rhasspy → Registros**; `LOG_LEVEL=debug` para todos los mensajes.
+
+## Soporte
+
+Preguntas y comentarios en el [foro de Gladys](https://community.gladysassistant.com/), errores en
+[GitHub](https://github.com/guim31/gladys-rhasspy/issues). Sin relación con el proyecto Rhasspy.

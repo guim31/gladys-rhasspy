@@ -32,15 +32,23 @@ pushing.
 
 ```
 index.js                          SDK wiring only: handlers registered before connect()
-src/devices/index.js              registry of the device blueprints + dispatch helpers
-src/devices/<type>.js             one device type per file (buildDevice, onPoll, onSetValue...)
-src/scenes.js                     scene action handlers (manifest `scene_actions`)
-src/widgets.js                    dashboard widget handlers (manifest `widgets`)
+src/app.js                        registers every SDK handler (same wiring in the tests)
+src/hub.js                        MQTT client, intents -> states and scene events, say, API check
+src/hermes.js                     Hermes topics and payloads (parse intents, build tts/say)
+src/mqtt.js                       mqtt.js client: link state, subscriptions, publish (QoS 1)
+src/api.js                        Rhasspy HTTP API: /api/version, /api/profile
+src/devices.js                    server and site devices (feature keys are forever)
+src/store.js                      /data/state.json: last intent per site, recent events
+src/clientId.js                   stable MQTT client id kept in /data
+src/issues.js                     a repeated failure logged once
+src/texts.js                      every text of the container, in en/fr/de/es; ActionFailure
+src/scenes.js                     scene action `say`
+src/widgets.js                    widget `recent_intents` and its speak form
 src/config.js                     DEFAULT_CONFIG (mirrors the manifest defaults) + normalization
-src/weather.js                    example driver (Open-Meteo)
-gladys-assistant-integration.json manifest: name, config_schema, actions, image...
-docs/en.md, docs/fr.md            user documentation, re-hosted by Gladys (mandatory)
-test/                             node --test, against the SDK's fake Gladys (integration-sdk/testing)
+gladys-assistant-integration.json manifest: name, config_schema, actions, triggers, widget...
+docs/{en,fr,de,es}.md             user documentation, re-hosted by Gladys (same sections)
+test/                             node --test, against the SDK's fake Gladys and a fake broker
+test/fixtures/hermes-capture.txt  real Hermes messages of Rhasspy 2.5.11 (profile fr)
 .github/scripts/release.mjs       release helpers (manifest bump, changelog), tested in test/
 ```
 
@@ -259,3 +267,27 @@ long, et sur un « Sie »/« Ihr… » de politesse en allemand. Le store exige 
 - Docs `en`, `fr`, `de`, `es` avec les mêmes sections.
 - Chauffe, ouverture, sécurité : ne rien rendre pilotable « comme un thermostat » ou par un assistant
   vocal quand une erreur serait dangereuse (leçon d'OctoPrint).
+
+## Rhasspy (Hermes over MQTT)
+
+- **Rhasspy 2.5 only.** Rhasspy 3 / Home Assistant voice speak Wyoming: that is gladys-wyoming (TTS
+  provider). This README says so; the gladys-wyoming one should point back here.
+- **MQTT only, no "Remote HTTP" intent handling**: an integration container has no published port
+  (ports exist only for the sub-containers of a manifest, `ports`), so Rhasspy cannot call it.
+- Real payloads (`test/fixtures/hermes-capture.txt`, Rhasspy 2.5.11 in Docker): `input` has the
+  substitutions applied (« allume » → `on`), **`rawInput` is what was said**: the text feature and
+  the scene variable use `rawInput`. A number slot is `{ kind: "Number", value: 5 }` with
+  `rawValue: "cinq"`: the value wins.
+- `/api/text-to-intent` publishes `hermes/intent/<name>` (or `hermes/nlu/intentNotRecognized`) like
+  a voice command: it is the test path without a microphone.
+- **`hermes/tts/sayFinished` comes even without audio output**: Rhasspy waits for `playFinished`
+  for the length of the audio, then confirms anyway. A site id Rhasspy does not serve gets **no**
+  answer: the say action fails after 30 s (`sayTimeoutMs`), action timeout 40 s.
+- The scene filters are equality only: slots are **sorted by name** so that `slot_1` is always the
+  same slot for an intent, whatever the order of the words.
+- The same sentence said twice must reach Gladys twice: `forgetPublishedStates(site device)` before
+  `publishChangedStates`, which would otherwise drop the repeat.
+- Widget form fields need **multi-language labels with `en`** (`{ en: 'default' }` for an
+  option), or `validateWidgetContent` drops the button; `gladys_version >=5.2.0` for the form.
+- The SDK wraps a scene action result as `{ outputs }` in the ack, and a widget content as
+  `{ content }`.
