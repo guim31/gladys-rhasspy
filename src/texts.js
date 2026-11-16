@@ -136,6 +136,7 @@ export const SAY_TEXT = {
   en: {
     said: (site) => `Rhasspy said the text on ${site}.`,
     noText: 'Enter the text Rhasspy must say.',
+    badSite: (site) => `"${site}" is not a valid site id (no space, no / # +).`,
     notConnected: 'The MQTT broker is not connected: Rhasspy cannot be reached.',
     timeout: (site) => `Rhasspy did not confirm the speech on ${site}: check the site id.`,
     failed: 'The MQTT broker did not take the request.',
@@ -143,6 +144,7 @@ export const SAY_TEXT = {
   fr: {
     said: (site) => `Rhasspy a dit le texte sur ${site}.`,
     noText: 'Saisissez le texte que Rhasspy doit dire.',
+    badSite: (site) => `« ${site} » n'est pas un siteId valide (ni espace, ni / # +).`,
     notConnected: "Le broker MQTT n'est pas connecté : Rhasspy est injoignable.",
     timeout: (site) => `Rhasspy n'a pas confirmé la lecture sur ${site} : vérifiez le site.`,
     failed: "Le broker MQTT n'a pas pris la demande.",
@@ -150,6 +152,7 @@ export const SAY_TEXT = {
   de: {
     said: (site) => `Rhasspy hat den Text auf ${site} gesagt.`,
     noText: 'Gib den Text ein, den Rhasspy sagen soll.',
+    badSite: (site) => `„${site}“ ist keine gültige Site-ID (kein Leerzeichen, kein / # +).`,
     notConnected: 'Der MQTT-Broker ist nicht verbunden: Rhasspy ist nicht erreichbar.',
     timeout: (site) => `Rhasspy hat die Ausgabe auf ${site} nicht bestätigt: Prüfe die Site-ID.`,
     failed: 'Der MQTT-Broker hat die Anfrage nicht angenommen.',
@@ -157,6 +160,7 @@ export const SAY_TEXT = {
   es: {
     said: (site) => `Rhasspy dijo el texto en ${site}.`,
     noText: 'Introduzca el texto que Rhasspy debe decir.',
+    badSite: (site) => `«${site}» no es un site id válido (sin espacios ni / # +).`,
     notConnected: 'El broker MQTT no está conectado: Rhasspy no es accesible.',
     timeout: (site) => `Rhasspy no confirmó la lectura en ${site}: compruebe el site id.`,
     failed: 'El broker MQTT no aceptó la solicitud.',

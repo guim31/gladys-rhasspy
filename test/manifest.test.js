@@ -137,8 +137,10 @@ test('the say action needs only its text, and returns the site', () => {
     ],
   );
   assert.deepEqual(keysOf(action.outputs), ['site_id']);
-  // Longer than the speech confirmation wait of the hub (30 s).
+  // Longer than the speech confirmation wait of the hub (30 s), for the
+  // scene action and for the form button of the widget.
   assert.ok(action.timeout_seconds > 30);
+  assert.ok(manifest.widgets[0].action_timeout_seconds > 30);
 });
 
 test('widget buttons with a form require Gladys >= 5.2.0', () => {

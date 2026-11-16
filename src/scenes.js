@@ -8,6 +8,7 @@
 // -----------------------------------------------------------------------------
 
 import { normalizeSiteId } from './config.js';
+import { ActionFailure, SAY_TEXT, allLanguages } from './texts.js';
 
 export const SCENE_ACTION = {
   SAY: 'say',
@@ -18,6 +19,12 @@ export const SCENE_ACTION = {
  * @param {{ text?: string, site_id?: string }} fields
  */
 export async function say(hub, fields = {}) {
-  const site = await hub.say(fields.text, normalizeSiteId(fields.site_id));
-  return { site_id: site };
+  const typed = typeof fields.site_id === 'string' ? fields.site_id.trim() : '';
+  const site = normalizeSiteId(typed);
+  // A site id that cannot be one (space, MQTT wildcard): never fall back to
+  // the default site, the text would be said in the wrong room.
+  if (typed !== '' && site === '') {
+    throw new ActionFailure(allLanguages(SAY_TEXT, 'badSite', typed));
+  }
+  return { site_id: await hub.say(fields.text, site) };
 }

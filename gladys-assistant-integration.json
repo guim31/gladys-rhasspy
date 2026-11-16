@@ -588,7 +588,8 @@
             "es": "Ocultar el botón de voz"
           }
         }
-      ]
+      ],
+      "action_timeout_seconds": 40
     }
   ]
 }

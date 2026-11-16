@@ -166,6 +166,15 @@ test('say fails in red: no confirmation, no text, no broker', async () => {
   const world = await connectedWorld();
   try {
     world.broker.answerSay = false;
+    // A configuration saved while a say waits: not a wrong site, a restart.
+    const pending = world.gladys.fake.sceneAction('say', { text: 'Bonjour', site_id: 'salon' });
+    await flush();
+    await world.gladys.fake.configUpdated({ broker_url: 'mqtt://other.example:1883' });
+    const restarted = await pending;
+    assert.equal(restarted.success, false);
+    assert.match(restarted.error.en, /not connected/);
+    world.broker.accept();
+    await flush();
     const silent = await world.gladys.fake.sceneAction('say', { text: 'Bonjour', site_id: 'x' });
     assert.equal(silent.success, false);
     assert.match(silent.error.fr, /n'a pas confirmé la lecture sur x/);
@@ -175,6 +184,14 @@ test('say fails in red: no confirmation, no text, no broker', async () => {
     assert.equal(empty.success, false);
     assert.match(empty.error.de, /Gib den Text ein/);
 
+    const badSite = await world.gladys.fake.sceneAction('say', {
+      text: 'Bonjour',
+      site_id: 'le salon',
+    });
+    assert.equal(badSite.success, false);
+    assert.match(badSite.error.fr, /« le salon » n'est pas un siteId valide/);
+
+    world.broker.answerSay = true;
     world.broker.failPublish = true;
     const refused = await world.gladys.fake.sceneAction('say', { text: 'Bonjour' });
     assert.equal(refused.success, false);

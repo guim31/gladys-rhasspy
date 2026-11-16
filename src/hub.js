@@ -114,7 +114,14 @@ export class Hub {
       this.serverOnline = null;
     }
     if (sameLink && this.client) {
-      // Only the API address, the sites or the language changed.
+      // Only the API address, the sites or the language changed — or Gladys
+      // reconnected: tell the link state again.
+      const state = this.client.state;
+      if (state === 'connected') {
+        await this.#status(true);
+      } else if (state) {
+        await this.#status(false, state === 'refused' ? MESSAGES.refused : MESSAGES.unreachable);
+      }
       this.discoveryKey = '';
       this.scheduleDiscovery();
       this.tick().catch(() => {});
@@ -158,7 +165,7 @@ export class Hub {
     clearInterval(this.tickTimer);
     this.tickTimer = null;
     for (const resolve of this.pendingSays.values()) {
-      resolve(false);
+      resolve('restarted');
     }
     this.pendingSays.clear();
   }
@@ -312,6 +319,9 @@ export class Hub {
     const done = await finished;
     clearTimeout(timer);
     this.pendingSays.delete(id);
+    if (done === 'restarted') {
+      throw new ActionFailure(allLanguages(SAY_TEXT, 'notConnected'));
+    }
     if (!done) {
       logger.warn(`Rhasspy did not confirm the speech on the site ${site}`);
       throw new ActionFailure(allLanguages(SAY_TEXT, 'timeout', site));
