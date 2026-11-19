@@ -1,177 +1,595 @@
 {
   "manifest_version": 1,
   "type": "device",
-  "name": "Demo Devices Template",
+  "name": "Rhasspy",
   "description": {
-    "en": "Starter template showing sensors, a switch, a dimmable light and a smart plug.",
-    "fr": "Template de démarrage : capteurs, interrupteur, lampe variable et prise connectée."
+    "en": "Your Rhasspy 2.5 voice intents trigger Gladys scenes, and Gladys makes Rhasspy speak.",
+    "fr": "Les intentions vocales de Rhasspy 2.5 lancent vos scènes Gladys, et Gladys fait parler Rhasspy.",
+    "de": "Die Sprach-Intents von Rhasspy 2.5 starten deine Gladys-Szenen, und Gladys lässt Rhasspy sprechen.",
+    "es": "Las intenciones de voz de Rhasspy 2.5 lanzan sus escenas Gladys, y Gladys hace hablar a Rhasspy."
   },
   "version": "1.0.0",
-  "docker_image": "ghcr.io/gladysassistant/integration-template-js:1.0.0",
-  "gladys_version": ">=5.1.0",
-  "cover_image": "https://raw.githubusercontent.com/GladysAssistant/integration-template-js/master/cover.png",
-  "categories": ["lighting", "security", "environment"],
-  "transports": ["local", "cloud"],
+  "docker_image": "ghcr.io/guim31/gladys-rhasspy:1.0.0",
+  "gladys_version": ">=5.2.0",
+  "cover_image": "https://raw.githubusercontent.com/guim31/gladys-rhasspy/main/cover.png",
+  "categories": ["assistants"],
+  "transports": ["local"],
   "config_schema": [
     {
       "key": "intro",
       "type": "section",
-      "label": { "en": "Getting started", "fr": "Pour commencer" },
+      "label": {
+        "en": "Connect Rhasspy",
+        "fr": "Connecter Rhasspy",
+        "de": "Rhasspy verbinden",
+        "es": "Conectar Rhasspy"
+      },
       "description": {
-        "en": "The demo weather station reads real data from the free Open-Meteo API: pick the coordinates to observe. No account, no API key.",
-        "fr": "La station météo de démonstration lit de vraies données via l'API gratuite Open-Meteo : choisissez les coordonnées à observer. Pas de compte, pas de clé d'API."
+        "en": "Rhasspy 2.5 talks over MQTT (Hermes protocol). In Rhasspy, Settings → MQTT: choose External and enter the same broker as here, or use its internal broker (port 12183). Intent Handling can stay disabled.",
+        "fr": "Rhasspy 2.5 communique par MQTT (protocole Hermes). Dans Rhasspy, Settings → MQTT : choisissez External et indiquez le même broker qu'ici, ou utilisez son broker interne (port 12183). Intent Handling peut rester désactivé.",
+        "de": "Rhasspy 2.5 kommuniziert über MQTT (Hermes-Protokoll). In Rhasspy, Settings → MQTT: Wähle External und gib denselben Broker wie hier ein, oder nutze seinen internen Broker (Port 12183). Intent Handling kann deaktiviert bleiben.",
+        "es": "Rhasspy 2.5 se comunica por MQTT (protocolo Hermes). En Rhasspy, Settings → MQTT: elija External e indique el mismo broker que aquí, o use su broker interno (puerto 12183). Intent Handling puede quedar desactivado."
       },
       "links": [
         {
-          "url": "https://open-meteo.com/en/docs",
-          "label": { "en": "Open-Meteo documentation", "fr": "Documentation Open-Meteo" }
+          "url": "https://rhasspy.readthedocs.io/en/latest/reference/#mqtt-api",
+          "label": {
+            "en": "Rhasspy MQTT API",
+            "fr": "API MQTT de Rhasspy",
+            "de": "MQTT-API von Rhasspy",
+            "es": "API MQTT de Rhasspy"
+          }
         }
       ]
     },
     {
-      "key": "latitude",
-      "type": "number",
-      "label": { "en": "Latitude", "fr": "Latitude" },
-      "description": {
-        "en": "Latitude used for the demo weather sensor.",
-        "fr": "Latitude utilisée par le capteur météo de démonstration."
-      },
-      "placeholder": { "en": "e.g. 48.8566", "fr": "ex. 48.8566" },
+      "key": "broker_url",
+      "type": "string",
       "required": true,
-      "default": 48.8566,
-      "min": -90,
-      "max": 90
+      "label": {
+        "en": "MQTT broker",
+        "fr": "Broker MQTT",
+        "de": "MQTT-Broker",
+        "es": "Broker MQTT"
+      },
+      "description": {
+        "en": "The broker Rhasspy publishes its intents on.",
+        "fr": "Le broker sur lequel Rhasspy publie ses intentions.",
+        "de": "Der Broker, auf dem Rhasspy seine Intents veröffentlicht.",
+        "es": "El broker en el que Rhasspy publica sus intenciones."
+      },
+      "placeholder": {
+        "en": "e.g. mqtt://rhasspy.local:1883",
+        "fr": "ex. mqtt://rhasspy.local:1883",
+        "de": "z. B. mqtt://rhasspy.local:1883",
+        "es": "p. ej. mqtt://rhasspy.local:1883"
+      }
     },
     {
-      "key": "longitude",
-      "type": "number",
-      "label": { "en": "Longitude", "fr": "Longitude" },
-      "description": {
-        "en": "Longitude used for the demo weather sensor.",
-        "fr": "Longitude utilisée par le capteur météo de démonstration."
-      },
-      "placeholder": { "en": "e.g. 2.3522", "fr": "ex. 2.3522" },
-      "required": true,
-      "default": 2.3522,
-      "min": -180,
-      "max": 180
+      "key": "username",
+      "type": "string",
+      "label": {
+        "en": "MQTT user name",
+        "fr": "Utilisateur MQTT",
+        "de": "MQTT-Benutzername",
+        "es": "Usuario MQTT"
+      }
     },
     {
-      "key": "unit",
+      "key": "password",
+      "type": "secret",
+      "label": {
+        "en": "MQTT password",
+        "fr": "Mot de passe MQTT",
+        "de": "MQTT-Passwort",
+        "es": "Contraseña MQTT"
+      }
+    },
+    {
+      "key": "tls_insecure",
+      "type": "boolean",
+      "default": false,
+      "label": {
+        "en": "Accept a self-signed certificate (mqtts://)",
+        "fr": "Accepter un certificat auto-signé (mqtts://)",
+        "de": "Selbstsigniertes Zertifikat akzeptieren (mqtts://)",
+        "es": "Aceptar un certificado autofirmado (mqtts://)"
+      }
+    },
+    {
+      "key": "api_url",
+      "type": "string",
+      "label": {
+        "en": "Rhasspy web address (optional)",
+        "fr": "Adresse web de Rhasspy (facultatif)",
+        "de": "Webadresse von Rhasspy (optional)",
+        "es": "Dirección web de Rhasspy (opcional)"
+      },
+      "description": {
+        "en": "Adds a server device: reachable, version, profile language. Not needed for intents and speech.",
+        "fr": "Ajoute un appareil serveur : joignable, version, langue du profil. Inutile pour les intentions et la parole.",
+        "de": "Fügt ein Server-Gerät hinzu: erreichbar, Version, Sprache des Profils. Für Intents und Sprache nicht nötig.",
+        "es": "Añade un dispositivo servidor: accesible, versión, idioma del perfil. No hace falta para intenciones y voz."
+      },
+      "placeholder": {
+        "en": "e.g. http://rhasspy.local:12101",
+        "fr": "ex. http://rhasspy.local:12101",
+        "de": "z. B. http://rhasspy.local:12101",
+        "es": "p. ej. http://rhasspy.local:12101"
+      }
+    },
+    {
+      "key": "default_site",
+      "type": "string",
+      "default": "default",
+      "label": {
+        "en": "Default site",
+        "fr": "Site par défaut",
+        "de": "Standard-Site",
+        "es": "Site predeterminado"
+      },
+      "description": {
+        "en": "The site id that speaks when a scene does not name one (Rhasspy: Settings → siteId).",
+        "fr": "Le siteId qui parle quand une scène n'en précise pas (Rhasspy : Settings → siteId).",
+        "de": "Die Site-ID, die spricht, wenn eine Szene keine angibt (Rhasspy: Settings → siteId).",
+        "es": "El siteId que habla cuando una escena no indica ninguno (Rhasspy: Settings → siteId)."
+      }
+    },
+    {
+      "key": "sites",
+      "type": "string",
+      "label": {
+        "en": "Listened sites (optional)",
+        "fr": "Sites écoutés (facultatif)",
+        "de": "Gehörte Sites (optional)",
+        "es": "Sites escuchados (opcional)"
+      },
+      "description": {
+        "en": "Site ids separated by commas. Empty: every site.",
+        "fr": "siteIds séparés par des virgules. Vide : tous les sites.",
+        "de": "Site-IDs, durch Kommas getrennt. Leer: alle Sites.",
+        "es": "siteIds separados por comas. Vacío: todos los sites."
+      },
+      "placeholder": {
+        "en": "e.g. default, kitchen",
+        "fr": "ex. default, cuisine",
+        "de": "z. B. default, kueche",
+        "es": "p. ej. default, cocina"
+      }
+    },
+    {
+      "key": "language",
       "type": "select",
-      "label": { "en": "Temperature unit", "fr": "Unité de température" },
-      "required": false,
-      "default": "celsius",
-      "options": [
-        { "value": "celsius", "label": { "en": "Celsius", "fr": "Celsius" } },
-        { "value": "fahrenheit", "label": { "en": "Fahrenheit", "fr": "Fahrenheit" } }
-      ]
-    },
-    {
-      "key": "poll_frequency",
-      "type": "number",
-      "label": { "en": "Refresh interval (s)", "fr": "Intervalle de rafraîchissement (s)" },
-      "description": {
-        "en": "How often sensors are polled, in seconds (one minute minimum).",
-        "fr": "Fréquence d'interrogation des capteurs, en secondes (une minute minimum)."
+      "default": "fr",
+      "label": {
+        "en": "Language of the names",
+        "fr": "Langue des noms",
+        "de": "Sprache der Namen",
+        "es": "Idioma de los nombres"
       },
-      "required": false,
-      "default": 300,
-      "min": 60,
-      "max": 3600
+      "description": {
+        "en": "Names of the devices and texts sent by the integration.",
+        "fr": "Noms des appareils et textes envoyés par l'intégration.",
+        "de": "Namen der Geräte und Texte der Integration.",
+        "es": "Nombres de los dispositivos y textos de la integración."
+      },
+      "options": [
+        {
+          "value": "en",
+          "label": {
+            "en": "English",
+            "fr": "Anglais",
+            "de": "Englisch",
+            "es": "Inglés"
+          }
+        },
+        {
+          "value": "fr",
+          "label": {
+            "en": "French",
+            "fr": "Français",
+            "de": "Französisch",
+            "es": "Francés"
+          }
+        },
+        {
+          "value": "de",
+          "label": {
+            "en": "German",
+            "fr": "Allemand",
+            "de": "Deutsch",
+            "es": "Alemán"
+          }
+        },
+        {
+          "value": "es",
+          "label": {
+            "en": "Spanish",
+            "fr": "Espagnol",
+            "de": "Spanisch",
+            "es": "Español"
+          }
+        }
+      ]
     }
   ],
   "actions": [
     {
-      "key": "test_weather",
-      "label": { "en": "Test the weather provider", "fr": "Tester le fournisseur météo" },
-      "timeout_seconds": 30
-    },
-    {
-      "key": "identify",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ]
+      "key": "check_connection",
+      "timeout_seconds": 15,
+      "label": {
+        "en": "Check the connection",
+        "fr": "Vérifier la connexion",
+        "de": "Verbindung prüfen",
+        "es": "Comprobar la conexión"
+      },
+      "description": {
+        "en": "Tells whether the MQTT broker and the Rhasspy web address answer.",
+        "fr": "Indique si le broker MQTT et l'adresse web de Rhasspy répondent.",
+        "de": "Zeigt, ob der MQTT-Broker und die Webadresse von Rhasspy antworten.",
+        "es": "Indica si el broker MQTT y la dirección web de Rhasspy responden."
+      }
     }
   ],
   "scene_triggers": [
     {
-      "key": "motion_detected",
-      "label": { "en": "Motion detected", "fr": "Mouvement détecté" },
+      "key": "intent_recognized",
+      "label": {
+        "en": "Rhasspy: intent recognized",
+        "fr": "Rhasspy : intention reconnue",
+        "de": "Rhasspy: Intent erkannt",
+        "es": "Rhasspy: intención reconocida"
+      },
       "description": {
-        "en": "A demo motion sensor saw a person or an animal move.",
-        "fr": "Un détecteur de démonstration a vu bouger une personne ou un animal."
+        "en": "Rhasspy recognized a sentence. Filter by intent, site and slot values (slots sorted by name); leave empty for any.",
+        "fr": "Rhasspy a reconnu une phrase. Filtrez par intention, site et valeurs des slots (triés par nom) ; vide = tous.",
+        "de": "Rhasspy hat einen Satz erkannt. Filtere nach Intent, Site und Slot-Werten (nach Name sortiert); leer = alle.",
+        "es": "Rhasspy reconoció una frase. Filtre por intención, site y valores de slots (ordenados por nombre); vacío = todos."
       },
       "fields": [
         {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Sensor", "fr": "Détecteur" }
+          "key": "intent",
+          "type": "string",
+          "label": {
+            "en": "Intent (exact name)",
+            "fr": "Intention (nom exact)",
+            "de": "Intent (genauer Name)",
+            "es": "Intención (nombre exacto)"
+          },
+          "placeholder": {
+            "en": "e.g. ChangeLightState",
+            "fr": "ex. ChangeLightState",
+            "de": "z. B. ChangeLightState",
+            "es": "p. ej. ChangeLightState"
+          }
         },
         {
-          "key": "target",
-          "type": "multi_select",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" },
-          "options": [
-            { "value": "person", "label": { "en": "Person", "fr": "Personne" } },
-            { "value": "animal", "label": { "en": "Animal", "fr": "Animal" } }
-          ]
+          "key": "site_id",
+          "type": "string",
+          "label": {
+            "en": "Site (siteId)",
+            "fr": "Site (siteId)",
+            "de": "Site (siteId)",
+            "es": "Site (siteId)"
+          },
+          "description": {
+            "en": "Empty: any site.",
+            "fr": "Vide : n'importe quel site.",
+            "de": "Leer: jede Site.",
+            "es": "Vacío: cualquier site."
+          }
+        },
+        {
+          "key": "slot_1_value",
+          "type": "string",
+          "label": {
+            "en": "Slot 1 value",
+            "fr": "Valeur du slot 1",
+            "de": "Wert von Slot 1",
+            "es": "Valor del slot 1"
+          }
+        },
+        {
+          "key": "slot_2_value",
+          "type": "string",
+          "label": {
+            "en": "Slot 2 value",
+            "fr": "Valeur du slot 2",
+            "de": "Wert von Slot 2",
+            "es": "Valor del slot 2"
+          }
+        },
+        {
+          "key": "slot_3_value",
+          "type": "string",
+          "label": {
+            "en": "Slot 3 value",
+            "fr": "Valeur du slot 3",
+            "de": "Wert von Slot 3",
+            "es": "Valor del slot 3"
+          }
         }
       ],
       "variables": [
         {
-          "key": "target",
+          "key": "intent",
           "type": "string",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" }
+          "label": {
+            "en": "Intent",
+            "fr": "Intention",
+            "de": "Intent",
+            "es": "Intención"
+          }
+        },
+        {
+          "key": "site_id",
+          "type": "string",
+          "label": {
+            "en": "Site",
+            "fr": "Site",
+            "de": "Site",
+            "es": "Site"
+          }
+        },
+        {
+          "key": "text",
+          "type": "string",
+          "label": {
+            "en": "Sentence heard",
+            "fr": "Phrase entendue",
+            "de": "Gehörter Satz",
+            "es": "Frase oída"
+          }
+        },
+        {
+          "key": "confidence",
+          "type": "number",
+          "label": {
+            "en": "Confidence (%)",
+            "fr": "Confiance (%)",
+            "de": "Konfidenz (%)",
+            "es": "Confianza (%)"
+          }
+        },
+        {
+          "key": "slots",
+          "type": "string",
+          "label": {
+            "en": "All slots",
+            "fr": "Tous les slots",
+            "de": "Alle Slots",
+            "es": "Todos los slots"
+          }
+        },
+        {
+          "key": "slot_1_name",
+          "type": "string",
+          "label": {
+            "en": "Slot 1: name",
+            "fr": "Slot 1 : nom",
+            "de": "Slot 1: Name",
+            "es": "Slot 1: nombre"
+          }
+        },
+        {
+          "key": "slot_1_value",
+          "type": "string",
+          "label": {
+            "en": "Slot 1: value",
+            "fr": "Slot 1 : valeur",
+            "de": "Slot 1: Wert",
+            "es": "Slot 1: valor"
+          }
+        },
+        {
+          "key": "slot_2_name",
+          "type": "string",
+          "label": {
+            "en": "Slot 2: name",
+            "fr": "Slot 2 : nom",
+            "de": "Slot 2: Name",
+            "es": "Slot 2: nombre"
+          }
+        },
+        {
+          "key": "slot_2_value",
+          "type": "string",
+          "label": {
+            "en": "Slot 2: value",
+            "fr": "Slot 2 : valeur",
+            "de": "Slot 2: Wert",
+            "es": "Slot 2: valor"
+          }
+        },
+        {
+          "key": "slot_3_name",
+          "type": "string",
+          "label": {
+            "en": "Slot 3: name",
+            "fr": "Slot 3 : nom",
+            "de": "Slot 3: Name",
+            "es": "Slot 3: nombre"
+          }
+        },
+        {
+          "key": "slot_3_value",
+          "type": "string",
+          "label": {
+            "en": "Slot 3: value",
+            "fr": "Slot 3 : valeur",
+            "de": "Slot 3: Wert",
+            "es": "Slot 3: valor"
+          }
+        }
+      ]
+    },
+    {
+      "key": "intent_not_recognized",
+      "label": {
+        "en": "Rhasspy: sentence not recognized",
+        "fr": "Rhasspy : phrase non reconnue",
+        "de": "Rhasspy: Satz nicht erkannt",
+        "es": "Rhasspy: frase no reconocida"
+      },
+      "description": {
+        "en": "Rhasspy heard a sentence that matches no intent.",
+        "fr": "Rhasspy a entendu une phrase qui ne correspond à aucune intention.",
+        "de": "Rhasspy hat einen Satz gehört, der zu keinem Intent passt.",
+        "es": "Rhasspy oyó una frase que no corresponde a ninguna intención."
+      },
+      "fields": [
+        {
+          "key": "site_id",
+          "type": "string",
+          "label": {
+            "en": "Site (siteId)",
+            "fr": "Site (siteId)",
+            "de": "Site (siteId)",
+            "es": "Site (siteId)"
+          },
+          "description": {
+            "en": "Empty: any site.",
+            "fr": "Vide : n'importe quel site.",
+            "de": "Leer: jede Site.",
+            "es": "Vacío: cualquier site."
+          }
+        }
+      ],
+      "variables": [
+        {
+          "key": "site_id",
+          "type": "string",
+          "label": {
+            "en": "Site",
+            "fr": "Site",
+            "de": "Site",
+            "es": "Site"
+          }
+        },
+        {
+          "key": "text",
+          "type": "string",
+          "label": {
+            "en": "Sentence heard",
+            "fr": "Phrase entendue",
+            "de": "Gehörter Satz",
+            "es": "Frase oída"
+          }
         }
       ]
     }
   ],
   "scene_actions": [
     {
-      "key": "identify_device",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "description": {
-        "en": "Make a device signal itself (the demo light blinks).",
-        "fr": "Fait se signaler un appareil (la lampe de démonstration clignote)."
+      "key": "say",
+      "timeout_seconds": 40,
+      "label": {
+        "en": "Rhasspy: say a text",
+        "fr": "Rhasspy : dire un texte",
+        "de": "Rhasspy: Text sagen",
+        "es": "Rhasspy: decir un texto"
       },
-      "timeout_seconds": 15,
+      "description": {
+        "en": "Rhasspy speaks the text on a site, with its own text-to-speech.",
+        "fr": "Rhasspy prononce le texte sur un site, avec sa propre synthèse vocale.",
+        "de": "Rhasspy spricht den Text auf einer Site, mit seiner eigenen Sprachausgabe.",
+        "es": "Rhasspy pronuncia el texto en un site, con su propia síntesis de voz."
+      },
       "fields": [
         {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
+          "key": "text",
+          "type": "string",
+          "required": true,
+          "label": {
+            "en": "Text",
+            "fr": "Texte",
+            "de": "Text",
+            "es": "Texto"
+          }
+        },
+        {
+          "key": "site_id",
+          "type": "string",
+          "label": {
+            "en": "Site (siteId)",
+            "fr": "Site (siteId)",
+            "de": "Site (siteId)",
+            "es": "Site (siteId)"
+          },
+          "description": {
+            "en": "Empty: the default site of the configuration.",
+            "fr": "Vide : le site par défaut de la configuration.",
+            "de": "Leer: die Standard-Site der Konfiguration.",
+            "es": "Vacío: el site predeterminado de la configuración."
+          }
         }
       ],
       "outputs": [
         {
-          "key": "signalled",
-          "type": "boolean",
-          "label": { "en": "Device signalled", "fr": "Appareil signalé" }
+          "key": "site_id",
+          "type": "string",
+          "label": {
+            "en": "Site",
+            "fr": "Site",
+            "de": "Site",
+            "es": "Site"
+          }
         }
       ]
     }
   ],
   "widgets": [
     {
-      "key": "demo_status",
-      "label": { "en": "Demo status", "fr": "État de la démo" },
-      "description": {
-        "en": "Live temperature and plug power, plug connection and observed location.",
-        "fr": "Température et puissance en direct, connexion de la prise, position observée."
+      "key": "recent_intents",
+      "icon": "mic",
+      "label": {
+        "en": "Rhasspy: recent intents",
+        "fr": "Rhasspy : intentions",
+        "de": "Rhasspy: Intents",
+        "es": "Rhasspy: intenciones"
       },
-      "icon": "activity",
-      "action_timeout_seconds": 15
+      "description": {
+        "en": "The last sentences Rhasspy heard, and a button to make it speak.",
+        "fr": "Les dernières phrases entendues par Rhasspy, et un bouton pour le faire parler.",
+        "de": "Die letzten von Rhasspy gehörten Sätze und ein Knopf, um es sprechen zu lassen.",
+        "es": "Las últimas frases oídas por Rhasspy y un botón para hacerlo hablar."
+      },
+      "settings": [
+        {
+          "key": "site",
+          "type": "select",
+          "source": "devices",
+          "label": {
+            "en": "Only this site",
+            "fr": "Seulement ce site",
+            "de": "Nur diese Site",
+            "es": "Solo este site"
+          }
+        },
+        {
+          "key": "hide_not_recognized",
+          "type": "boolean",
+          "default": false,
+          "label": {
+            "en": "Hide sentences not recognized",
+            "fr": "Masquer les phrases non reconnues",
+            "de": "Nicht erkannte Sätze ausblenden",
+            "es": "Ocultar las frases no reconocidas"
+          }
+        },
+        {
+          "key": "hide_say_button",
+          "type": "boolean",
+          "default": false,
+          "label": {
+            "en": "Hide the speak button",
+            "fr": "Masquer le bouton de parole",
+            "de": "Sprechknopf ausblenden",
+            "es": "Ocultar el botón de voz"
+          }
+        }
+      ],
+      "action_timeout_seconds": 40
     }
   ]
 }

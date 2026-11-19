@@ -1,45 +1,104 @@
 // -----------------------------------------------------------------------------
-// Integration configuration.
-//
-// The configuration is filled in by the user in Gladys, from the `config_schema`
-// declared in `gladys-assistant-integration.json`. The SDK fetches it for you
-// (`gladys.getConfig()`) and notifies you of every change through
-// `gladys.onConfigUpdated()`.
-//
-// This module only provides defaults and normalizes the received object, so the
-// rest of the code never has to deal with `undefined`.
+// Integration configuration: defaults (they mirror the `default` values of the
+// manifest `config_schema`, see test/manifest.test.js) and normalization, so
+// the rest of the code never deals with blanks, strings or `undefined`.
 // -----------------------------------------------------------------------------
 
-// Defaults: they MUST stay consistent with the `default` values declared in the
-// `config_schema` of the manifest.
+export const LANGUAGES = ['en', 'fr', 'de', 'es'];
+
 export const DEFAULT_CONFIG = {
-  latitude: 48.8566, // Paris
-  longitude: 2.3522,
-  unit: 'celsius', // 'celsius' | 'fahrenheit'
-  // Seconds between two reads of the polled sensors. Gladys polls at most once
-  // a minute: slower intervals are applied by skipping polls (see
-  // createPoller in src/devices/index.js).
-  poll_frequency: 300,
-  // Reserved key (NOT in config_schema): because the manifest declares both
-  // 'local' and 'cloud' in its `transports` field, Gladys shows a standard
-  // "Prefer the local connection" toggle and sends the user's choice here.
-  // Read-only for the integration; defaults to true.
-  GLADYS_PREFER_LOCAL: true,
+  broker_url: '',
+  username: '',
+  password: '',
+  tls_insecure: false,
+  api_url: '',
+  default_site: 'default',
+  sites: '',
+  language: 'fr',
 };
 
+const text = (value) => (typeof value === 'string' ? value.trim() : '');
+const bool = (value, fallback) =>
+  value === true || value === 'true'
+    ? true
+    : value === false || value === 'false'
+      ? false
+      : fallback;
+
+/** An address with its scheme, among the allowed ones; '' otherwise. */
+function normalizeUrl(value, defaultScheme, schemes) {
+  const raw = text(value);
+  if (raw === '') {
+    return '';
+  }
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `${defaultScheme}://${raw}`;
+  try {
+    const url = new URL(withScheme);
+    return schemes.includes(url.protocol) && url.hostname ? withScheme : '';
+  } catch {
+    return '';
+  }
+}
+
 /**
- * Merge the user config with the defaults.
- * @param {Record<string, unknown>} raw config returned by the SDK
+ * The broker address: users type `192.0.2.10`, `192.0.2.10:1883` or a full
+ * `mqtt://` / `mqtts://` URL. Rhasspy's internal broker listens on 12183.
+ */
+export const normalizeBrokerUrl = (value) =>
+  normalizeUrl(value, 'mqtt', ['mqtt:', 'mqtts:', 'ws:', 'wss:']);
+
+/** The HTTP API of Rhasspy (`http://host:12101`), without a trailing slash. */
+export const normalizeApiUrl = (value) =>
+  normalizeUrl(value, 'http', ['http:', 'https:']).replace(/\/+$/, '');
+
+/**
+ * A Rhasspy site id, as typed in its settings ("Satellite siteIds"): no MQTT
+ * wildcard nor separator, since it goes into topics.
+ */
+export const normalizeSiteId = (value) => {
+  const raw = text(value);
+  return raw === '' || /[#+/\s]/.test(raw) ? '' : raw;
+};
+
+/** A comma (or space) separated list of site ids, without duplicates. */
+export function normalizeSites(value) {
+  const list = text(value)
+    .split(/[,;\s]+/)
+    .map(normalizeSiteId)
+    .filter((site) => site !== '');
+  return [...new Set(list)];
+}
+
+/**
+ * @param {object} [raw] the values received from Gladys
  */
 export function normalizeConfig(raw = {}) {
+  const source = raw ?? {};
   return {
-    ...DEFAULT_CONFIG,
-    ...raw,
-    // Force the types: config may arrive as strings from a form.
-    latitude: Number(raw.latitude ?? DEFAULT_CONFIG.latitude),
-    longitude: Number(raw.longitude ?? DEFAULT_CONFIG.longitude),
-    poll_frequency: Number(raw.poll_frequency ?? DEFAULT_CONFIG.poll_frequency),
-    // The preference is a boolean; anything but an explicit false means true.
-    GLADYS_PREFER_LOCAL: raw.GLADYS_PREFER_LOCAL !== false,
+    broker_url: normalizeBrokerUrl(source.broker_url),
+    username: text(source.username),
+    // A password may legitimately start or end with a space: kept as typed.
+    password: typeof source.password === 'string' ? source.password : '',
+    tls_insecure: bool(source.tls_insecure, false),
+    api_url: normalizeApiUrl(source.api_url),
+    default_site: normalizeSiteId(source.default_site) || DEFAULT_CONFIG.default_site,
+    // Empty: every site is listened to.
+    sites: normalizeSites(source.sites),
+    language: LANGUAGES.includes(source.language) ? source.language : DEFAULT_CONFIG.language,
   };
+}
+
+export const isConfigured = (config) => Boolean(config?.broker_url);
+
+/**
+ * An address safe for the logs and the messages: no user name, no password,
+ * no path or query string.
+ */
+export function safeUrl(value) {
+  try {
+    const url = new URL(value);
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return '(invalid address)';
+  }
 }

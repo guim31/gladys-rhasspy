@@ -30,6 +30,17 @@ Gladys before reporting a problem.
 
 In scope: the code of this repository and the Docker image it publishes.
 
+What the integration handles:
+
+- the MQTT broker address, user name and password, stored by Gladys in the integration
+  configuration and never written to the logs (addresses are logged without credentials);
+- in `/data`, a random MQTT client id (`client-id`) and the last intents heard per site with the
+  recent sentences (`state.json`): spoken sentences can be personal, they never leave the
+  container except to Gladys;
+- network: the MQTT broker you configure (subscribe to `hermes/intent/#`,
+  `hermes/nlu/intentNotRecognized`, `hermes/tts/sayFinished`, publish `hermes/tts/say`), and
+  optionally Rhasspy's HTTP API (`GET /api/version`, `GET /api/profile`). No cloud service.
+
 Out of scope: Gladys Assistant itself (see its
-[security policy](https://github.com/GladysAssistant/Gladys/security/policy)),
-and the third-party services and devices the integration talks to.
+[security policy](https://github.com/GladysAssistant/Gladys/security/policy)), Rhasspy, your MQTT
+broker, and the third-party services and devices the integration talks to.

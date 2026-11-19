@@ -1,169 +1,180 @@
 // -----------------------------------------------------------------------------
-// Dashboard widgets (SDK v0.14+, Gladys 5.1+).
+// The "Rhasspy: recent intents" dashboard widget: the last sentences heard,
+// newest first, and a button opening a form to make Rhasspy speak.
 //
-// A widget puts the integration's own data on the Gladys dashboard without a
-// dedicated core widget. The manifest `widgets` field declares its identity
-// (key, label, icon, optional per-instance `settings`); at runtime the
-// integration returns a DECLARATIVE content — `text`, `value`, `gauge`,
-// `status`, `chart`, `card-list`, `image`, `button` — that the core renders
-// with its own theme, dark mode and translations. No HTML, no CSS.
-//
-// Each entry of WIDGETS is keyed by the widget `key` and exposes:
-//   - get(gladys, { settings, language, units, config }): the content,
-//     registered by index.js with `gladys.onWidgetGet(key, ...)`;
-//   - action(gladys, { actionKey, params, settings, config }) (optional): a
-//     tapped `button` carrying an `action`, registered with
-//     `gladys.onWidgetAction`.
-//
-// Check your contents in the tests with `validateWidgetContent` (exported by
-// the SDK, see test/widgets.test.js), or run with DEBUG=gladys-integration-sdk
-// to have the SDK log every violation of the vocabulary and the budget.
+// Content budget of the core: one `card-list` (8 rows at most) and one
+// button. A row: the intent (or "Not recognized"), the sentence heard, the
+// time, the site as a badge; its detail panel lists the slots and the
+// confidence. Pre-localized from the viewer's `language` (the core caches the
+// content per settings, language and units). Settings: one site only, hide
+// the sentences not recognized, hide the button.
 // -----------------------------------------------------------------------------
 
-import {
-  createLogger,
-  DEVICE_FEATURE_CATEGORIES,
-  DEVICE_TRANSPORTS,
-  WIDGET_COLORS,
-} from '@gladysassistant/integration-sdk';
-import { identifyDevice } from './devices/index.js';
-import { weatherStation } from './devices/weatherStation.js';
-import { plug } from './devices/plug.js';
-import { light } from './devices/light.js';
+import { WIDGET_COLORS } from '@gladysassistant/integration-sdk';
+import { isConfigured } from './config.js';
+import { WIDGET_KEY } from './hub.js';
+import { SAY_TEXT, allLanguages, pick } from './texts.js';
 
-const logger = createLogger({ name: 'widgets' });
+export const WIDGET = {
+  RECENT_INTENTS: WIDGET_KEY,
+};
+export const WIDGET_ACTION = {
+  SAY: 'say',
+};
 
-// Widget key, as declared in the manifest `widgets` field.
-export const DEMO_STATUS_WIDGET = 'demo_status';
+export const CONTENT_TTL_SECONDS = 60;
 
-// Keys of the `button` actions the demo_status content declares.
-const DEMO_STATUS_ACTIONS = { IDENTIFY_LIGHT: 'identify_light' };
-
-// How the plug transport reads in the status list.
-const TRANSPORT_STATUS = {
-  [DEVICE_TRANSPORTS.LOCAL]: { value: { en: 'Local', fr: 'Locale' }, color: WIDGET_COLORS.SUCCESS },
-  [DEVICE_TRANSPORTS.CLOUD]: { value: { en: 'Cloud', fr: 'Cloud' }, color: WIDGET_COLORS.INFO },
-  [DEVICE_TRANSPORTS.UNREACHABLE]: {
-    value: { en: 'Unreachable', fr: 'Injoignable' },
-    color: WIDGET_COLORS.DANGER,
+export const TEXT = {
+  en: {
+    notConfigured: 'Enter the address of the MQTT broker in the integration configuration.',
+    nothing: 'Nothing heard yet.',
+    notRecognized: 'Not recognized',
+    silence: '(nothing heard)',
+    confidence: (n) => `Confidence: ${n} %`,
+    say: 'Make it speak',
+    text: 'Text to say',
+    site: 'Site',
+  },
+  fr: {
+    notConfigured: "Saisissez l'adresse du broker MQTT dans la configuration de l'intégration.",
+    nothing: "Rien entendu pour l'instant.",
+    notRecognized: 'Non reconnue',
+    silence: '(rien entendu)',
+    confidence: (n) => `Confiance : ${n} %`,
+    say: 'Faire parler',
+    text: 'Texte à dire',
+    site: 'Site',
+  },
+  de: {
+    notConfigured: 'Gib die Adresse des MQTT-Brokers in der Konfiguration der Integration ein.',
+    nothing: 'Noch nichts gehört.',
+    notRecognized: 'Nicht erkannt',
+    silence: '(nichts gehört)',
+    confidence: (n) => `Konfidenz: ${n} %`,
+    say: 'Sprechen lassen',
+    text: 'Zu sagender Text',
+    site: 'Site',
+  },
+  es: {
+    notConfigured: 'Introduzca la dirección del broker MQTT en la configuración de la integración.',
+    nothing: 'Nada oído por ahora.',
+    notRecognized: 'No reconocida',
+    silence: '(nada oído)',
+    confidence: (n) => `Confianza: ${n} %`,
+    say: 'Hacer hablar',
+    text: 'Texto a decir',
+    site: 'Site',
   },
 };
 
-// A live tile references a feature by its external_id: read it from the
-// discovery payload itself, so the widget and the device never disagree.
-function featureExternalId(gladys, config, blueprint, category) {
-  const device = blueprint.buildDevice(gladys, config);
-  return device.features.find((feature) => feature.category === category).external_id;
-}
+/** A form label: the core wants a multi-language object with `en`. */
+const labelOf = (key) =>
+  Object.fromEntries(Object.entries(TEXT).map(([language, texts]) => [language, texts[key]]));
 
-function plugConnectionStatus(gladys, config) {
-  const { transport, degraded } = plug.transport(gladys, config);
-  const { value, color } = TRANSPORT_STATUS[transport];
-  if (degraded) {
-    return {
-      value: { en: `${value.en} (degraded mode)`, fr: `${value.fr} (mode dégradé)` },
-      color: WIDGET_COLORS.WARNING,
-    };
-  }
-  return { value, color };
-}
-
-export const WIDGETS = {
-  [DEMO_STATUS_WIDGET]: {
-    // `settings` holds the per-instance values of the declared `settings`
-    // (none here); `language` and `units` are those of the user viewing the
-    // dashboard, for the values you format yourself. Multi-language objects
-    // (`{ en, fr }`) are picked by the core, like everywhere else.
-    async get(gladys, { config }) {
-      logger.debug(`onWidgetGet <- ${DEMO_STATUS_WIDGET}`);
-      return {
-        // Reload policy: the computed parts below only change with the
-        // config, and index.js nudges the widget on every (re)connection and
-        // config update (see refreshWidgets) — the TTL is just a safety net.
-        ttl_seconds: 300,
-        components: [
-          // Device-bound tiles: LIVE, they follow the published states over
-          // the core's real-time path. No TTL, no nudge involved.
-          {
-            type: 'value',
-            label: { en: 'Temperature', fr: 'Température' },
-            icon: 'thermometer',
-            device_feature: featureExternalId(
-              gladys,
-              config,
-              weatherStation,
-              DEVICE_FEATURE_CATEGORIES.TEMPERATURE_SENSOR,
-            ),
-          },
-          {
-            type: 'value',
-            label: { en: 'Office plug', fr: 'Prise du bureau' },
-            icon: 'zap',
-            device_feature: featureExternalId(
-              gladys,
-              config,
-              plug,
-              DEVICE_FEATURE_CATEGORIES.ENERGY_SENSOR,
-            ),
-          },
-          // Computed rows: what the integration knows that no device feature
-          // carries. Served from the core cache until the TTL or a nudge.
-          {
-            type: 'status',
-            items: [
-              {
-                label: { en: 'Plug connection', fr: 'Connexion de la prise' },
-                icon: 'wifi',
-                ...plugConnectionStatus(gladys, config),
-              },
-              {
-                label: { en: 'Observed location', fr: 'Position observée' },
-                icon: 'map-pin',
-                value: `${config.latitude.toFixed(2)}, ${config.longitude.toFixed(2)}`,
-                color: WIDGET_COLORS.NEUTRAL,
-              },
-            ],
-          },
-          // `params` are declared HERE and sent back as-is: the handler never
-          // receives user input (a dashboard can hang on a public wall).
-          {
-            type: 'button',
-            label: { en: 'Identify the light', fr: 'Identifier la lampe' },
-            icon: 'eye',
-            style: 'secondary',
-            action: {
-              key: DEMO_STATUS_ACTIONS.IDENTIFY_LIGHT,
-              params: { device: light.deviceExternalId(gladys) },
-            },
-          },
-        ],
-      };
-    },
-
-    // Resolve an optional toast (string or multi-language object, ≤ 200
-    // characters). After a successful action the core drops the cached
-    // content and every open dashboard refetches it: no nudge needed.
-    async action(gladys, { actionKey, params, config }) {
-      logger.info(`onWidgetAction <- ${DEMO_STATUS_WIDGET}.${actionKey}`);
-      if (actionKey === DEMO_STATUS_ACTIONS.IDENTIFY_LIGHT) {
-        return identifyDevice(gladys, params.device, config);
-      }
-      // Throwing acks the action as failed: the message reaches the user.
-      throw new Error(`Unknown widget action: ${actionKey}`);
-    },
-  },
-};
+const clip = (text, max) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
+const truthy = (value) => value === true || value === 'true';
 
 /**
- * Freshness nudge: ask the core to re-pull every widget NOW instead of
- * waiting for the content TTL. Call it when you KNOW a computed content
- * changed (here: the config, which drives the plug transport and the observed
- * location) — and after every (re)connection, since the nudges are
- * fire-and-forget: rate-limited core-side to 1 per 10 s per widget, dropped
- * silently while disconnected.
+ * Pure builder of the widget content.
+ * @param {object} input
+ * @param {object[]} input.events the recent events, newest first
+ * @param {string[]} input.sites the sites the form offers
+ * @param {string} input.defaultSite
+ * @param {{ showButton: boolean }} input.options
+ * @param {string} input.language
  */
-export function refreshWidgets(gladys) {
-  for (const key of Object.keys(WIDGETS)) {
-    gladys.requestWidgetRefresh(key);
+export function buildRecentContent({ events, sites, defaultSite, options, language }) {
+  const text = pick(TEXT, language);
+  const components = [];
+  if (events.length === 0) {
+    components.push({ type: 'text', variant: 'body', text: text.nothing });
+  } else {
+    components.push({
+      type: 'card-list',
+      display: 'list',
+      items: events.slice(0, 8).map((event) => {
+        const details = [
+          ...event.slots.map((slot) => `${slot.name} = ${slot.value}`),
+          ...(event.recognized && event.confidence !== null
+            ? [text.confidence(event.confidence)]
+            : []),
+        ];
+        return {
+          title: clip(event.recognized ? event.intent : text.notRecognized, 60),
+          subtitle: clip(event.text || text.silence, 120),
+          date: event.at,
+          badge: {
+            text: clip(event.site, 16),
+            color: event.recognized ? WIDGET_COLORS.SUCCESS : WIDGET_COLORS.WARNING,
+          },
+          ...(details.length > 0 ? { description: details.join('\n') } : {}),
+        };
+      }),
+    });
   }
+  if (options.showButton) {
+    components.push({
+      type: 'button',
+      label: text.say,
+      icon: 'volume-2',
+      style: 'secondary',
+      action: {
+        key: WIDGET_ACTION.SAY,
+        fields: [
+          { key: 'text', type: 'string', required: true, label: labelOf('text') },
+          {
+            key: 'site_id',
+            type: 'select',
+            required: true,
+            default: sites.includes(defaultSite) ? defaultSite : sites[0],
+            label: labelOf('site'),
+            options: sites.map((site) => ({ value: site, label: { en: site } })),
+          },
+        ],
+      },
+    });
+  }
+  return { ttl_seconds: CONTENT_TTL_SECONDS, components };
+}
+
+/**
+ * The onWidgetGet handler.
+ * @param {import('./hub.js').Hub} hub
+ * @param {{ settings?: object, language?: string }} request
+ */
+export function getRecentWidget(hub, { settings = {}, language = 'en' } = {}) {
+  const text = pick(TEXT, language);
+  if (!isConfigured(hub.config)) {
+    return {
+      ttl_seconds: CONTENT_TTL_SECONDS,
+      components: [{ type: 'text', variant: 'body', text: text.notConfigured }],
+    };
+  }
+  // A site device chosen in the settings narrows the list (and the form) to it.
+  const chosen = hub.addedSites().find(({ device }) => device.external_id === settings.site);
+  const sites = chosen ? [chosen.siteId] : hub.knownSites();
+  const events = (hub.memory?.recent ?? []).filter(
+    (event) =>
+      (!chosen || event.site === chosen.siteId) &&
+      (event.recognized || !truthy(settings.hide_not_recognized)),
+  );
+  return buildRecentContent({
+    events,
+    sites,
+    defaultSite: hub.config.default_site,
+    options: { showButton: !truthy(settings.hide_say_button) && sites.length > 0 },
+    language,
+  });
+}
+
+/**
+ * The onWidgetAction handler: the form of the button.
+ * @param {import('./hub.js').Hub} hub
+ */
+export async function onRecentAction(hub, actionKey, params, { values } = {}) {
+  if (actionKey !== WIDGET_ACTION.SAY) {
+    throw new Error(`Unknown widget action ${actionKey}`);
+  }
+  const site = await hub.say(values?.text, values?.site_id);
+  return allLanguages(SAY_TEXT, 'said', site);
 }

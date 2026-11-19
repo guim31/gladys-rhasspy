@@ -1,77 +1,143 @@
+// -----------------------------------------------------------------------------
+// The "recent intents" widget: content within the core's vocabulary and
+// budget, settings honoured, the form of its button.
+// -----------------------------------------------------------------------------
+
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { validateWidgetContent } from '@gladysassistant/integration-sdk';
-import { createFakeGladys } from '@gladysassistant/integration-sdk/testing';
-import { buildDiscoveredDevices } from '../src/devices/index.js';
-import { simulateLanSession } from '../src/devices/plug.js';
-import { DEMO_STATUS_WIDGET, WIDGETS, refreshWidgets } from '../src/widgets.js';
-import { normalizeConfig } from '../src/config.js';
+import { siteIds } from '../src/devices.js';
+import {
+  BROKER_URL,
+  addDiscovered,
+  captured,
+  createWorld,
+  flush,
+  settle,
+} from './helpers/world.js';
 
-const gladys = createFakeGladys();
-const config = normalizeConfig();
-const demoStatus = WIDGETS[DEMO_STATUS_WIDGET];
+async function heardWorld() {
+  const world = await createWorld({ config: { broker_url: BROKER_URL } });
+  world.broker.accept();
+  for (const prefix of ['hermes/intent/ChangeLightState', 'hermes/nlu/intentNotRecognized']) {
+    const { topic, payload } = captured(prefix);
+    world.broker.send(topic, payload);
+    await flush();
+  }
+  await settle();
+  return world;
+}
 
-// What the SDK passes to onWidgetGet, plus the config index.js adds.
-const getContent = (cfg = config) =>
-  demoStatus.get(gladys, { settings: {}, language: 'en', units: 'metric', config: cfg });
+const valid = (content) => {
+  const problems = validateWidgetContent(content);
+  assert.deepEqual(problems, [], JSON.stringify(problems));
+};
 
-test('the demo_status content is rendered exactly as sent', async () => {
-  // [] = nothing the core would drop, truncate or trim to the content budget.
-  assert.deepEqual(validateWidgetContent(await getContent()), []);
-});
-
-test('the degraded plug connection content is valid too', async () => {
-  simulateLanSession(false);
+test('the recent sentences, newest first, with a speak button', async () => {
+  const world = await heardWorld();
   try {
-    const content = await getContent();
-    assert.deepEqual(validateWidgetContent(content), []);
-    const status = content.components.find((component) => component.type === 'status');
-    assert.ok(
-      status.items.some((item) => item.color === 'warning'),
-      'degraded shows a warning',
+    const ack = await world.gladys.fake.widgetGet('recent_intents', { language: 'fr' });
+    assert.equal(ack.success, true, JSON.stringify(ack));
+    const content = ack.data.content;
+    valid(content);
+    const [list, button] = content.components;
+    assert.equal(list.type, 'card-list');
+    assert.deepEqual(
+      list.items.map((item) => [item.title, item.subtitle, item.badge.text]),
+      [
+        ['Non reconnue', 'chante une chanson', 'default'],
+        ['ChangeLightState', 'allume la lumière du salon', 'salon'],
+      ],
+    );
+    assert.equal(list.items[1].description, 'name = salon\nstate = on\nConfiance : 100 %');
+    assert.equal(list.items[1].date, '2026-11-16T18:00:00.000Z');
+    assert.equal(button.action.key, 'say');
+    assert.deepEqual(
+      button.action.fields[1].options.map((o) => o.value),
+      ['default', 'salon'],
     );
   } finally {
-    simulateLanSession(true);
+    world.app.stop();
   }
 });
 
-test('the live tiles reference features the integration publishes', async () => {
-  const featureIds = new Set(
-    buildDiscoveredDevices(gladys, config).flatMap((device) =>
-      device.features.map((feature) => feature.external_id),
-    ),
-  );
-  const liveTiles = (await getContent()).components.filter((c) => c.device_feature);
-  assert.ok(liveTiles.length > 0, 'the template demonstrates a device-bound tile');
-  for (const tile of liveTiles) {
-    assert.ok(featureIds.has(tile.device_feature), `unknown feature ${tile.device_feature}`);
+test('the settings: one site, without the sentences not recognized, without the button', async () => {
+  const world = await heardWorld();
+  try {
+    const salon = siteIds(world.gladys, 'salon').device;
+    await addDiscovered(world, salon);
+    const content = (
+      await world.gladys.fake.widgetGet('recent_intents', {
+        language: 'en',
+        settings: { site: salon, hide_say_button: true },
+      })
+    ).data.content;
+    valid(content);
+    assert.equal(content.components.length, 1);
+    assert.deepEqual(
+      content.components[0].items.map((item) => item.title),
+      ['ChangeLightState'],
+    );
+    const recognizedOnly = (
+      await world.gladys.fake.widgetGet('recent_intents', {
+        settings: { hide_not_recognized: true },
+      })
+    ).data.content;
+    assert.deepEqual(
+      recognizedOnly.components[0].items.map((item) => item.title),
+      ['ChangeLightState'],
+    );
+  } finally {
+    world.app.stop();
   }
 });
 
-test('every button action of the content is handled and answers a short toast', async () => {
-  const buttons = (await getContent()).components.filter((c) => c.type === 'button' && c.action);
-  assert.ok(buttons.length > 0, 'the template demonstrates a widget action');
-  for (const { action } of buttons) {
-    const message = await demoStatus.action(gladys, {
-      actionKey: action.key,
-      params: action.params ?? {},
-      settings: {},
-      config,
-    });
-    assert.ok(message.en, 'the toast carries at least the mandatory `en` text');
-    assert.ok(message.en.length <= 200, 'toasts are capped at 200 characters');
+test('nothing heard yet, or no broker: a sentence instead of the list', async () => {
+  const world = await createWorld({ config: {} });
+  try {
+    const content = (await world.gladys.fake.widgetGet('recent_intents', { language: 'de' })).data
+      .content;
+    valid(content);
+    assert.match(content.components[0].text, /MQTT-Brokers/);
+  } finally {
+    world.app.stop();
+  }
+  const quiet = await createWorld();
+  try {
+    const content = (await quiet.gladys.fake.widgetGet('recent_intents', { language: 'es' })).data
+      .content;
+    valid(content);
+    assert.equal(content.components[0].text, 'Nada oído por ahora.');
+  } finally {
+    quiet.app.stop();
   }
 });
 
-test('an unknown widget action fails, so the user sees the error', async () => {
-  await assert.rejects(
-    demoStatus.action(gladys, { actionKey: 'unknown', params: {}, settings: {}, config }),
-    /Unknown widget action/,
-  );
-});
-
-test('refreshWidgets nudges every widget', () => {
-  const fresh = createFakeGladys();
-  refreshWidgets(fresh);
-  assert.deepEqual(fresh.fake.widgetRefreshes, Object.keys(WIDGETS));
+test('the speak button: green when Rhasspy confirms, red otherwise', async () => {
+  const world = await heardWorld();
+  try {
+    const ok = await world.gladys.fake.widgetAction(
+      'recent_intents',
+      'say',
+      {},
+      {
+        values: { text: 'Bonjour', site_id: 'salon' },
+      },
+    );
+    assert.equal(ok.success, true, JSON.stringify(ok));
+    assert.equal(world.broker.published.at(-1).payload.siteId, 'salon');
+    world.broker.answerSay = false;
+    const ko = await world.gladys.fake.widgetAction(
+      'recent_intents',
+      'say',
+      {},
+      {
+        values: { text: 'Bonjour', site_id: 'salon' },
+      },
+    );
+    assert.equal(ko.success, false);
+    assert.match(ko.error.fr, /salon/);
+  } finally {
+    world.app.stop();
+  }
 });
