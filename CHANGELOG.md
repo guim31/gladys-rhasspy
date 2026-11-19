@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-19
+
 ### Added
 
 - Rhasspy 2.5 over MQTT (Hermes): the intents Rhasspy recognizes trigger Gladys scenes, filtered
@@ -22,3 +24,6 @@ the notes of the version's GitHub Release.
 - An optional server device from Rhasspy's web address: reachable, version, profile language.
 - A dashboard widget with the recent intents and a button to make Rhasspy speak.
 - A "Check the connection" action, and texts in English, French, German and Spanish.
+
+[Unreleased]: https://github.com/guim31/gladys-rhasspy/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/guim31/gladys-rhasspy/releases/tag/v1.0.0
